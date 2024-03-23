@@ -1,13 +1,13 @@
 
 use bevy::{input::mouse::MouseMotion, prelude::*};
-use bevy_rapier3d::{control::KinematicCharacterController, dynamics::Velocity};
+use bevy_rapier3d::{control::KinematicCharacterController, dynamics::{ExternalImpulse, Velocity}};
 
 use crate::PlayerCamera;
 
 pub struct InputsPlugin;
 
 const ROTATION_SPEED: f32 = 0.2;
-const MOVE_SPEED: f32 = 6.;
+const MOVE_SPEED: f32 = 4.;
 const GRAVITY: Vec3 = Vec3::new(0., -9.81, 0.);
 const DAMPING: f32 = 5.;
 
@@ -28,14 +28,18 @@ fn catch_inputs (
 
     mut camera_transform: Query<&mut Transform, With<PlayerCamera>>,
 
-    mut character_controller: Query<(&mut KinematicCharacterController, &mut Velocity)>,
+    mut character_controller: Query<(&mut KinematicCharacterController, &mut Velocity, &mut ExternalImpulse)>,
     mut mouse_motion : EventReader<MouseMotion>,
 
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut cooldown: Local<(f32, Key)>,
+    mut cooldown: Local<(f32, u32)>,
 ) {
+
     cooldown.0 += time.delta_seconds();
+    if cooldown.0 > 10. {
+        cooldown.1 = 0;
+    }
 
     // CAMERA
     let mut motion_sum: Vec2 = Vec2::ZERO;
@@ -68,13 +72,19 @@ fn catch_inputs (
     
     // PLAYER / COLLIDER
 
-    let (mut character_controller, mut velocity) = character_controller.single_mut();
+    let (mut character_controller, mut velocity, mut external_force) = character_controller.single_mut();
 
     if keyboard.pressed(KeyCode::Space) {
-        if cooldown.0 > 0.3 {
+        if cooldown.0 > 1. {
             
-            velocity.linvel.y += 10.;
-            cooldown.0 = 0.
+            external_force.impulse += Vec3::Y * 15.;
+            // external_force.torque_impulse += Vec3::Y * 0.1;
+            // if external_force.force> 25. {
+            //     external_force.force = 25.;
+            // }
+            
+            cooldown.0 = 0.;
+            cooldown.1 += 1;
         }
     }
 
@@ -110,4 +120,7 @@ fn catch_inputs (
     velocity.linvel += horizontal_shift * MOVE_SPEED + damping + gravity;
 
     character_controller.translation = Some(velocity.linvel * time.delta_seconds());
+
+
+
 }

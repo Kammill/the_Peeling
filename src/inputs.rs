@@ -7,7 +7,7 @@ use crate::PlayerCamera;
 pub struct InputsPlugin;
 
 const ROTATION_SPEED: f32 = 0.2;
-const MOVE_SPEED: f32 = 4.;
+const MOVE_SPEED: f32 = 1.;
 const GRAVITY: Vec3 = Vec3::new(0., -9.81, 0.);
 const DAMPING: f32 = 5.;
 
@@ -77,7 +77,7 @@ fn catch_inputs (
     if keyboard.pressed(KeyCode::Space) {
         if cooldown.0 > 1. {
             
-            external_force.impulse += Vec3::Y * 15.;
+            external_force.impulse += Vec3::Y * 8.;
             // external_force.torque_impulse += Vec3::Y * 0.1;
             // if external_force.force> 25. {
             //     external_force.force = 25.;

@@ -2,14 +2,14 @@
 use bevy::{input::mouse::MouseMotion, prelude::*};
 use bevy_rapier3d::{control::KinematicCharacterController, dynamics::{ExternalImpulse, Velocity}};
 
-use crate::PlayerCamera;
+use crate::{camera::MainCamera, world::Player};
 
 pub struct InputsPlugin;
 
 const ROTATION_SPEED: f32 = 0.2;
-const MOVE_SPEED: f32 = 1.;
+const MOVE_SPEED: f32 = 0.7;
 const GRAVITY: Vec3 = Vec3::new(0., -9.81, 0.);
-const DAMPING: f32 = 5.;
+const DAMPING: f32 = 7.;
 
 #[derive(Default)]
 struct Key(pub Option<KeyCode>);
@@ -18,7 +18,8 @@ impl Plugin for InputsPlugin {
     fn build(&self, app: &mut App){
         
         app
-        .add_systems(Update, catch_inputs);
+        .add_event::<EffectEvent>()
+        .add_systems(Update, (catch_inputs, effect));
         
     }
 }
@@ -26,7 +27,7 @@ impl Plugin for InputsPlugin {
 
 fn catch_inputs (
 
-    mut camera_transform: Query<&mut Transform, With<PlayerCamera>>,
+    mut camera_transform: Query<&mut Transform, With<MainCamera>>,
 
     mut character_controller: Query<(&mut KinematicCharacterController, &mut Velocity, &mut ExternalImpulse)>,
     mut mouse_motion : EventReader<MouseMotion>,
@@ -34,10 +35,12 @@ fn catch_inputs (
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut cooldown: Local<(f32, u32)>,
+    mut dash: Local<(f32, f32)>,
+    mut writer: EventWriter<EffectEvent>,
 ) {
-
+    dash.0 += time.delta_seconds();
     cooldown.0 += time.delta_seconds();
-    if cooldown.0 > 10. {
+    if cooldown.0 > 5. {
         cooldown.1 = 0;
     }
 
@@ -78,11 +81,6 @@ fn catch_inputs (
         if cooldown.0 > 1. {
             
             external_force.impulse += Vec3::Y * 8.;
-            // external_force.torque_impulse += Vec3::Y * 0.1;
-            // if external_force.force> 25. {
-            //     external_force.force = 25.;
-            // }
-            
             cooldown.0 = 0.;
             cooldown.1 += 1;
         }
@@ -110,7 +108,14 @@ fn catch_inputs (
     }
 
 
-    let horizontal_shift = h_shift.normalize_or_zero();
+    let mut horizontal_shift = h_shift.normalize_or_zero();
+
+    if keyboard.pressed(KeyCode::KeyR) {
+        if dash.0 > 2.5 {
+            writer.send(EffectEvent(horizontal_shift, 50.));
+            dash.0 = 0.
+        }
+    }
 
     let gravity = GRAVITY * time.delta_seconds();
     let mut damping = velocity.linvel;
@@ -120,7 +125,42 @@ fn catch_inputs (
     velocity.linvel += horizontal_shift * MOVE_SPEED + damping + gravity;
 
     character_controller.translation = Some(velocity.linvel * time.delta_seconds());
+}
 
 
+#[derive(Event, Clone)]
+struct EffectEvent(pub Vec3, pub f32);
+
+fn effect(
+
+    time: Res<Time>,
+
+
+    mut event_set: ParamSet<(
+        EventReader<EffectEvent>,
+        EventWriter<EffectEvent>,
+    )>,
+
+    mut character_velocity: Query<&mut Velocity, With<Player>>,
+) {
+
+    let mut events: Vec<EffectEvent> = Vec::new();
+
+    for event in event_set.p0().read() {
+        events.push(event.clone());
+    }
+
+    for mut event in events {
+
+        let dash = 200. * time.delta_seconds();
+        event.1 -= dash;
+        let advance = event.0 * dash;
+        character_velocity.single_mut().linvel += advance;
+
+        if event.1 > 0. {
+            event_set.p1().send(event);
+        }
+
+    }
 
 }

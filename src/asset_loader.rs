@@ -58,7 +58,7 @@ fn load_scenes (
     asset_server: Res<AssetServer>,
 ){
     scenes.scenes.push(asset_server.load("models/spike_ling_0.glb#Scene0"));
-    scenes.scenes.push(asset_server.load("models/test_runner.glb#Scene0"));
+    scenes.scenes.push(asset_server.load("models/deco/stalagmite_base.glb#Scene0"));
 }
 
 fn load_animations(

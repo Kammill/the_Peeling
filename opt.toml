@@ -1,0 +1,99 @@
+//cargo run --features bevy/dynamic_linking
+//wasm-server-runner target/wasm32-unknown-unknown/debug/the_peeling.wasm
+//cargo build --target wasm32-unknown-unknown           
+//cargo build --target wasm32-unknown-unknown --release
+
+// wasm-bindgen --no-typescript --target web --out-dir ./out/ --out-name "ThePeeling" ./target/wasm32-unknown-unknown/release/the_peeling.wasm
+//     --out-dir ./out/ \
+//     --out-name "mygame" \
+//     ./target/wasm32-unknown-unknown/release/mygame.wasm
+//comment
+
+[profile.release]
+lto = true
+opt-level = 'z'
+wasm-opt -Oz -o output.wasm input.wasm
+
+opt-level = 's'
+
+Or, to even more aggressively optimize for size, at further potential speed costs:
+[profile.release]
+opt-level = 'z'
+
+# Optimize for size.
+wasm-opt -Os -o output.wasm input.wasm
+
+# Optimize aggressively for size.
+wasm-opt -Oz --strip-debug -o output.wasm input.wasm
+
+# Optimize for speed.
+wasm-opt -O -o output.wasm input.wasm
+
+# Optimize aggressively for speed.
+wasm-opt -O3 -o output.wasm input.wasm
+
+
+steps:
+
+cargo build --target wasm32-unknown-unknown --release
+wasm-bindgen --no-typescript --target web --out-dir ./out/ --out-name "ThePeeling" ./target/wasm32-unknown-unknown/release/the_peeling.wasm
+wasm-opt -Os -o ThePeeling_bg.wasm ThePeeling_bg.wasm
+
+wasm-strip -o ThePeeling_bg.wasm ThePeeling_bg.wasm
+wasm-opt -Oz --strip-debug -o ThePeeling_bg.wasm ThePeeling_bg.wasm
+
+>>ZIP
+
+
+butler push out_2.zip kammil/hell-peeling:web
+
+
+    function handlePointerLock() {
+            // Include the pointer lock module JavaScript
+            function requestPointerLock(element) {
+            element.requestPointerLock = element.requestPointerLock ||
+                                        element.mozRequestPointerLock ||
+                                        element.webkitRequestPointerLock;
+            element.requestPointerLock();
+        }
+
+        function exitPointerLock() {
+            document.exitPointerLock = document.exitPointerLock ||
+                                    document.mozExitPointerLock ||
+                                    document.webkitExitPointerLock;
+            document.exitPointerLock();
+        }
+
+        // Get the main canvas element
+
+        const bevyCanvas = document.getElementsByTagName("canvas").item(0);
+
+
+        // Add event listener to the canvas for pointer lock request
+        bevyCanvas.addEventListener('click', () => {
+            requestPointerLock(bevyCanvas);
+        });
+
+        // Add event listener for pointer lock change event
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === bevyCanvas) {
+                console.log('Pointer locked!');
+                // Pointer is locked, you can handle your game controls here
+            } else {
+                console.log('Pointer unlocked!');
+                // Pointer is unlocked, handle accordingly
+            }
+        });
+        // Add event listener for pointer lock error event
+        document.addEventListener('pointerlockerror', () => {
+            console.error('Pointer lock error!');
+            // Handle pointer lock error
+        });
+    }
+
+    
+    window.addEventListener('load', () => {
+        const iFrame = document .getElementsByName("iframe");
+
+        console.log(iFrame.src);
+    });

@@ -3,9 +3,6 @@
 #[derive(Component)]
 pub struct TestStart(pub usize);
 
-
-
-
 struct SpawnerPlugin;
 
 impl Plugin for SpawnerPlugin {
@@ -149,12 +146,9 @@ fn tmp_animation(
             },
             None => (),
         }
-        
-
     }
-
-
 }
+
 fn spawning(
     time: Res<Time>,
     mut commands: Commands,

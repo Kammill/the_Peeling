@@ -1,15 +1,16 @@
 
-use bevy::{input::mouse::MouseMotion, prelude::*};
+use bevy::{input::mouse::MouseMotion, prelude::*, utils::info};
 use bevy_rapier3d::{control::KinematicCharacterController, dynamics::{ExternalImpulse, Velocity}};
 
-use crate::{camera::MainCamera, world::Player};
+use crate::{camera::{CameraRotationVelocity, MainCamera}, world::Player};
 
 pub struct InputsPlugin;
 
-const ROTATION_SPEED: f32 = 0.2;
+const ROTATION_SPEED: f32 = 0.125;
 const MOVE_SPEED: f32 = 0.7;
-const GRAVITY: Vec3 = Vec3::new(0., -9.81, 0.);
-const DAMPING: f32 = 7.;
+const GRAVITY: Vec3 = Vec3::new(0., -16., 0.);
+const LIN_DAMPING: f32 = 7.;
+const ROT_DAMPING: f32 = 22.;
 
 #[derive(Default)]
 struct Key(pub Option<KeyCode>);
@@ -29,7 +30,13 @@ fn catch_inputs (
 
     mut camera_transform: Query<&mut Transform, With<MainCamera>>,
 
-    mut character_controller: Query<(&mut KinematicCharacterController, &mut Velocity, &mut ExternalImpulse)>,
+    mut character_controller: Query<(
+        &mut KinematicCharacterController,
+        &mut Velocity,
+        &mut ExternalImpulse,
+        &mut CameraRotationVelocity
+    )>,
+    mut cameras: Query<&mut Camera>,
     mut mouse_motion : EventReader<MouseMotion>,
 
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -44,43 +51,79 @@ fn catch_inputs (
         cooldown.1 = 0;
     }
 
-    // CAMERA
+    if keyboard.pressed(KeyCode::Tab) {
+        if cooldown.0 > 1. {
+            
+            for mut camera in cameras.iter_mut(){
+                camera.is_active = !camera.is_active;
+            }
+            cooldown.0 = 0.;
+            cooldown.1 += 1;
+        }
+    }
+
+
+
+
+
+    let (mut character_controller, mut velocity, mut external_force, mut rotation) =
+         character_controller.single_mut();
+
     let mut motion_sum: Vec2 = Vec2::ZERO;
     for motion in mouse_motion.read() {
         motion_sum += motion.delta;
     }
 
     let mut camera_transform = camera_transform.single_mut();
+    let angles = rotation.0;
+    let mut yaw = angles.x;
+    let mut pitch = angles.y;
 
-    let yaw_rotation = -ROTATION_SPEED * motion_sum.x * time.delta_seconds();
-    let pitch_rotation = ROTATION_SPEED * motion_sum.y * time.delta_seconds();
+    if keyboard.pressed(KeyCode::KeyT) {
 
-    //yaw
-    camera_transform.rotate_y(yaw_rotation);
-
-    //pitch
-    //TODO: Add Clamping
-    let dir = camera_transform.right();
-    let mut fake_transform = camera_transform.clone();
-    fake_transform.rotate_axis(Vec3::new(dir.x, dir.y, dir.z), -pitch_rotation);
-
-    let foward_dir = fake_transform.forward();
-    let dir_vec = Vec3::new(foward_dir.x, foward_dir.y, foward_dir.z);
-    let dot = -Vec3::Y.dot(dir_vec);
-
-    if  dot > -0.8 && dot < 0.8 {
-        camera_transform.rotate_axis(Vec3::new(dir.x, dir.y, dir.z), -pitch_rotation);
+        yaw = yaw * yaw + 100.;
+        if yaw > 150. {
+            yaw = 150.
+        }
     }
 
+
+
+
+    yaw *= -ROTATION_SPEED * ROT_DAMPING * time.delta_seconds();
+    pitch *= -ROTATION_SPEED * ROT_DAMPING * time.delta_seconds();
+
+    yaw += -ROTATION_SPEED * motion_sum.x ;
+    pitch += ROTATION_SPEED * motion_sum.y;
+
+
+    let pitch_rotation = pitch * time.delta_seconds();
+    let right = camera_transform.right().normalize();
+    let mut fake_transform = camera_transform.clone();
+    fake_transform.rotate_axis(right, -pitch_rotation);
+
+    let forward_dir = fake_transform.forward().normalize();
+    let dot = -Vec3::Y.dot(forward_dir);
+
+    if  dot < -0.8 || dot > 0.8 {
+        pitch = 0.;
+    }
+
+    let pitch_quaternion = Quat::from_axis_angle(right, -pitch * time.delta_seconds());
+    //camera_transform.rotate_axis(right, -pitch * time.delta_seconds());
+    camera_transform.rotate(pitch_quaternion);
     
-    // PLAYER / COLLIDER
+    
+    let yaw_quaternion = Quat::from_axis_angle(Vec3::Y, yaw *  time.delta_seconds());
+    // camera_transform.rotate_y(yaw * time.delta_seconds());
+    camera_transform.rotate(yaw_quaternion);
 
-    let (mut character_controller, mut velocity, mut external_force) = character_controller.single_mut();
-
+    rotation.0 = Vec3::new(yaw, pitch, 0.);
+    
     if keyboard.pressed(KeyCode::Space) {
         if cooldown.0 > 1. {
-            
             external_force.impulse += Vec3::Y * 8.;
+            //velocity.linvel.y += 11.;
             cooldown.0 = 0.;
             cooldown.1 += 1;
         }
@@ -108,7 +151,7 @@ fn catch_inputs (
     }
 
 
-    let mut horizontal_shift = h_shift.normalize_or_zero();
+    let horizontal_shift = h_shift.normalize_or_zero();
 
     if keyboard.pressed(KeyCode::KeyR) {
         if dash.0 > 2.5 {
@@ -119,12 +162,13 @@ fn catch_inputs (
 
     let gravity = GRAVITY * time.delta_seconds();
     let mut damping = velocity.linvel;
-    damping.x *= -MOVE_SPEED * DAMPING;
-    damping.z *= -MOVE_SPEED * DAMPING;
+    damping.x *= -MOVE_SPEED * LIN_DAMPING;
+    damping.z *= -MOVE_SPEED * LIN_DAMPING;
     damping *= time.delta_seconds();
     velocity.linvel += horizontal_shift * MOVE_SPEED + damping + gravity;
 
     character_controller.translation = Some(velocity.linvel * time.delta_seconds());
+
 }
 
 

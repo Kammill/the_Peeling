@@ -1,91 +1,132 @@
 
-use bevy::prelude::*;
-#[derive(Resource, Debug, Default)]
-pub struct TextureAssets {
+use bevy::{asset:: UntypedAssetId, prelude::*, utils::HashMap};
 
-    pub ground: Vec<Handle<Image>>,
+
+#[derive(Default, Resource)]
+pub struct GameAssets{
+
+    requested: HashMap<usize, Vec<UntypedAssetId>>,
+
+    handles: usize,
+    image: Vec<(Handle<Image>, String)>,
+    meshes: Vec<Handle<Mesh>>,
+    materials: Vec<Handle<StandardMaterial>>,
+    scenes: Vec<(Handle<Scene>, String)>,
+    animations: Vec<(Handle<AnimationClip>, String)>,
+}
+
+impl GameAssets {
+
+    pub fn new_world(&mut self) -> usize {
+        
+        let handle = self.handles;
+        self.handles += 1;
+        handle
+    }
+
+    pub fn request_image(&mut self, world_handle: usize, path: String, server: &Res<AssetServer>) 
+        -> Handle<Image> 
+    {   
+
+        if !self.requested.contains_key(&world_handle){
+            self.requested.insert(world_handle, Vec::new());
+        }
+
+        for img in self.image.iter(){
+            if img.1 == path {
+                return img.0.clone();
+            }
+        }
+        let handle: Handle<Image> = server.load(path.clone());
+        self.image.push((handle.clone(), path));
+        self.requested.get_mut(&world_handle).unwrap().push(handle.clone().into());
+        handle
+        
+    }
+
+    pub fn request_scene(&mut self, world_handle: usize, path: String, server: &Res<AssetServer>) 
+    -> Handle<Scene> 
+    {   
+
+        if !self.requested.contains_key(&world_handle){
+            self.requested.insert(world_handle, Vec::new());
+        }
+
+        for scene in self.scenes.iter(){
+            if scene.1 == path {
+                return scene.0.clone();
+            }
+        }
+        let handle: Handle<Scene> = server.load(path.clone());
+        self.scenes.push((handle.clone(), path));
+        self.requested.get_mut(&world_handle).unwrap().push(handle.clone().into());
+        handle
     
-}
+    }
 
-#[derive(Resource, Debug, Default)]
-pub struct MeshAssets {
+    pub fn request_animation(&mut self, world_handle: usize, path: String, server: &Res<AssetServer>) 
+    -> Handle<AnimationClip> 
+    {   
 
-    pub meshes: Vec<Handle<Mesh>>,
+        if !self.requested.contains_key(&world_handle){
+            self.requested.insert(world_handle, Vec::new());
+        }
+
+        for animation in self.animations.iter(){
+            if animation.1 == path {
+                return animation.0.clone();
+            }
+        }
+        let handle: Handle<AnimationClip> = server.load(path.clone());
+        self.animations.push((handle.clone(), path));
+        self.requested.get_mut(&world_handle).unwrap().push(handle.clone().into());
+        handle
     
-}
+    }
 
-#[derive(Resource, Debug, Default)]
-pub struct ColorMaterialAssets {
-    pub materials: Vec<Handle<StandardMaterial>>,
-}
+    pub fn wait_for_world_assets(&mut self, world_handle: usize, server: &Res<AssetServer>){
+        loop{
 
-#[derive(Resource, Debug, Default)]
-pub struct ScenesAssets {
-    pub scenes: Vec<Handle<Scene>>,
-}
+            let mut to_remove: Vec<UntypedAssetId> = Vec::new();
+            for id in self.requested.get(&world_handle).unwrap().iter() {
+    
+                let state = server.get_load_state(*id);
+                match state {
+                    Some(_) => {
+                        to_remove.push(*id);
+                    },
+                    None => (),
+                }
+            }
+            
+            for loaded_assets in to_remove {
+                let mut idx = 0;
+                for id in self.requested.get(&world_handle).unwrap(){
+                    if *id == loaded_assets {
+                        break;
+                    }
+                    idx += 1;
+                }
+                self.requested.get_mut(&world_handle).unwrap().swap_remove(idx);
+            }
+    
+            if self.requested.get(&world_handle).unwrap().is_empty() {
+                break;
+            }
+        }
+    }
 
-#[derive(Resource, Debug, Default)]
-pub struct AnimationAssets {
-    pub animations: Vec<Handle<AnimationClip>>,
-}
-
-pub struct AssetLoaderPlugin;
-
-impl Plugin for AssetLoaderPlugin {
-    fn build(&self, app: &mut App){
-        app
-        .init_resource::<TextureAssets>()
-        .init_resource::<MeshAssets>()
-        .init_resource::<ColorMaterialAssets>()
-        .init_resource::<ScenesAssets>()
-        .init_resource::<AnimationAssets>()
-        .add_systems(Startup, (load_textures, load_meshes, load_scenes, load_animations));
+    pub fn get_animation(&self) -> Handle<AnimationClip> {
+        self.animations[0].0.clone()
     }
 }
 
-
-fn load_textures (
-    mut textures: ResMut<TextureAssets>,
-    asset_server: Res<AssetServer>,
-){
-    textures.ground.push(asset_server.load("textures/gravier_16px.png"));
-    //textures.ground.push(asset_server.load("textures/8x8_hellish_palette.png"));
+pub struct AssetLoaderPlugin<S: States> {
+    pub state: S,
 }
-
-
-fn load_scenes (
-    mut scenes: ResMut<ScenesAssets>,
-    asset_server: Res<AssetServer>,
-){
-    scenes.scenes.push(asset_server.load("models/spike_ling_0.glb#Scene0"));
-    scenes.scenes.push(asset_server.load("models/deco/stalagmite_base.glb#Scene0"));
-}
-
-fn load_animations(
-    mut animations: ResMut<AnimationAssets>,
-    asset_server: Res<AssetServer>,
-){
-    animations.animations.push(asset_server.load("models/spike_ling_0.glb#Animation1"));
-    animations.animations.push(asset_server.load("models/test_runner.glb#Animation1"));
-}
-
-
-fn load_meshes(
-    mut materials: ResMut<ColorMaterialAssets>,
-    mut standard_materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<MeshAssets>,
-    asset_server: Res<AssetServer>,
-){
-
-    meshes.meshes.push(asset_server.load("models/shapes/simple_sphere.glb#Mesh0/Primitive0"));
-
-    materials.materials.push(standard_materials.add(StandardMaterial{
-        base_color: Color::RED,
-        ..default()
-    }));
-
-    materials.materials.push(standard_materials.add(StandardMaterial{
-        base_color: Color::BLUE,
-        ..default()
-    }));
+impl<S: States> Plugin for AssetLoaderPlugin<S> {
+    fn build(&self, app: &mut App){
+        app
+        .init_resource::<GameAssets>();
+    }
 }
